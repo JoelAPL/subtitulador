@@ -32,6 +32,7 @@ instalar.bat
 | A− / A+ | `-` / `+` | Tamaño de letra |
 | ◐− / ◐+ | rueda del mouse | Fondo más transparente / más oscuro |
 | 🌐 | | Cambiar de traductor |
+| US·A / GB… | | Variante de inglés (`·A` = detectada automáticamente) |
 | ✕ | `Esc` | Salir |
 | ◢ (esquina) | | Arrastrar para cambiar el tamaño del cuadro |
 
@@ -43,12 +44,28 @@ La barra no aparece en las capturas de pantalla, así que puede ponerse encima d
 
 | Nombre | Internet | Notas |
 |---|---|---|
-| `argos` | No | Por defecto. Rápido (~0.15 s por frase). |
+| `argos` | No | Por defecto y el más rápido (~0.15 s por frase). |
 | `mymemory` | Sí | Gratis, límite diario de caracteres. |
-| `google` | Sí | Gratis, puede bloquear si se usa mucho. |
+| `google` | Sí | Gratis, puede bloquear si se usa mucho. Los traductores en línea añaden de 0.5 a 1 s. |
 | `deepl` | Sí | El de mejor calidad. Requiere la variable de entorno `DEEPL_API_KEY` (la clave gratuita termina en `:fx`). |
 
 Si un traductor en línea falla, se usa `argos` automáticamente.
+
+### Variantes de inglés
+
+El programa detecta de qué país es el inglés por las palabras típicas que van saliendo (`mate`, `bloody`, `innit` → Reino Unido; `arvo`, `heaps` → Australia; `aye`, `wee` → Escocia/Irlanda; por defecto EE.UU.) y pasa las expresiones locales a inglés estándar antes de traducir:
+
+| Variante | Ejemplo | Traducción |
+|---|---|---|
+| Reino Unido | Fancy a cuppa? Brilliant, innit. | ¿Quieres una taza de té? Genial, ¿no? |
+| Reino Unido | Your pants are on the floor. | Tu ropa interior está en el suelo. |
+| Australia | G'day mate, see you this arvo. | Hola amigo, nos vemos esta tarde. |
+| Escocia | Ye dinnae ken what ye want. | No sabes lo que quieres. |
+| EE.UU. | Hey buddy, I'm pissed at mom. | Hola amigo, estoy enfadado con mamá. |
+
+Algunas palabras cambian de significado según el país (`pants`, `pissed`, `fanny`, `root`…), por eso solo se cambian cuando se detecta esa variante. Con el botón de variante se puede fijar una a mano.
+
+Todo está en `variantes.json`: se pueden añadir palabras o variantes nuevas (por ejemplo `en-ZA`, `en-IN`) sin tocar código.
 
 ### Glosario
 
@@ -75,7 +92,8 @@ Genera `video.es.srt` y abre el video en VLC con los subtítulos. Modelos: `smal
 
 - **OCR**: `Windows.Media.Ocr` (incluido en Windows) vía `winrt`. Antes de leer, la imagen se pasa a blanco y negro aislando el texto claro, que es como suelen venir los subtítulos.
 - **Limpieza**: corrige confusiones típicas del OCR (`probabIy` → `probably`, `0` entre letras → `o`) y pasa el texto en MAYÚSCULAS a normal, que el traductor maneja mucho mejor.
-- **Captura**: `mss`, cada 0.4 s; solo se traduce cuando el texto cambia.
+- **Captura**: `mss`, cada 0.15 s. Si la imagen del subtítulo no cambió, no se vuelve a leer; la imagen solo se agranda cuando la letra es pequeña (agrandar hace el OCR ~5 veces más lento). Del cambio de subtítulo a la traducción en pantalla pasan unos 0.3 s con `argos`.
+- **Variantes**: `variantes.py` puntúa las palabras típicas de cada país en los últimos subtítulos y normaliza el texto con `variantes.json`.
 - **Transcripción**: `faster-whisper` en CPU (int8); el audio se extrae con `ffmpeg`.
 
 ## Licencia
