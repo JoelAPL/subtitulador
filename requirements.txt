@@ -1,0 +1,13 @@
+argostranslate>=1.11
+deep-translator>=1.11
+faster-whisper>=1.2
+mss>=10.0
+numpy>=2.0
+pillow>=11.0
+winrt-runtime>=3.2
+winrt-Windows.Foundation>=3.2
+winrt-Windows.Foundation.Collections>=3.2
+winrt-Windows.Globalization>=3.2
+winrt-Windows.Graphics.Imaging>=3.2
+winrt-Windows.Media.Ocr>=3.2
+winrt-Windows.Storage.Streams>=3.2
