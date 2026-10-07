@@ -1,0 +1,26 @@
+# Palabras que el traductor deja en inglés -> cómo quieres que salgan.
+# Una por línea: ingles = español. Guarda y reinicia el programa para aplicar.
+swap = intercambio
+swapping = intercambio
+swapped = intercambiado
+swinger = swinger
+swingers = swingers
+wives = esposas
+wife = esposa
+husband = esposo
+hubby = maridito
+probably = probablemente
+okay = vale
+ok = vale
+yeah = sí
+gonna = vas a
+wanna = quieres
+gotta = tengo que
+kinda = un poco
+dunno = no sé
+babe = cariño
+honey = cariño
+fuck = joder
+fucking = jodido
+damn = maldición
+shit = mierda
