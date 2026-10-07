@@ -20,15 +20,17 @@ from pathlib import Path
 
 import argostranslate.translate as argos
 import mss
-from PIL import Image
+from PIL import Image, ImageChops
 from winrt.windows.globalization import Language
 from winrt.windows.graphics.imaging import BitmapPixelFormat, SoftwareBitmap
 from winrt.windows.media.ocr import OcrEngine
 from winrt.windows.storage.streams import DataWriter
 
+from variantes import AUTO, Variantes
+
 ctypes.windll.shcore.SetProcessDpiAwareness(2)  # coordenadas reales en pantallas con zoom
 
-INTERVALO = 0.4  # segundos entre lecturas
+INTERVALO = 0.15  # segundos entre lecturas (si la imagen no cambió, no se lee de nuevo)
 GLOSARIO = Path(__file__).with_name("glosario.txt")
 CONFIG = Path(__file__).with_name("config.json")
 WDA_EXCLUDEFROMCAPTURE = 0x11
@@ -125,11 +127,10 @@ def a_softwarebitmap(img):
 
 
 def preparar(img):
-    """Escala a gris, agranda y aísla el texto claro (subtítulos blancos)."""
+    """Escala a gris, aísla el texto claro (subtítulos blancos) y agranda solo si es pequeño."""
     g = img.convert("L")
-    escala = max(1, min(3, 120 // max(1, g.height // 2)))
-    if escala > 1:
-        g = g.resize((g.width * escala, g.height * escala), Image.LANCZOS)
+    if g.height < 45:  # agrandar cuesta ~5x más OCR; solo vale la pena con letra pequeña
+        g = g.resize((g.width * 2, g.height * 2), Image.BILINEAR)
     # texto blanco -> negro sobre blanco, que es lo que mejor lee el OCR
     return g.point(lambda p: 0 if p > 190 else 255)
 
@@ -143,10 +144,11 @@ class Lector(threading.Thread):
         self.motor = OcrEngine.try_create_from_language(Language("en-US"))
         self.cache = {}
         self.motor_traduccion = "argos"
+        self.variantes = Variantes()
         argos.translate("hello", "en", "es")  # precarga: la primera traducción tarda ~5 s
 
     def traducir(self, texto):
-        texto = limpiar(texto)
+        texto = self.variantes.normalizar(limpiar(texto))
         clave = (self.motor_traduccion, texto)
         if clave not in self.cache:
             try:
@@ -165,13 +167,21 @@ class Lector(threading.Thread):
 
     async def bucle(self):
         anterior = ""
-        with mss.mss() as sct:
+        huella_anterior = None
+        with mss.MSS() as sct:
             while self.activo:
                 if self.zona:
                     x, y, w, h = self.zona
                     shot = sct.grab({"left": x, "top": y, "width": w, "height": h})
                     img = Image.frombytes("RGB", shot.size, shot.rgb)
-                    texto = await self.ocr(preparar(img))
+                    lista = preparar(img)
+                    # huella: miniatura del texto aislado; si no cambió, el subtítulo es el mismo
+                    huella = lista.resize((80, max(4, 80 * lista.height // lista.width)))
+                    if huella_anterior is not None and huella.size == huella_anterior.size and                             ImageChops.difference(huella, huella_anterior).getbbox() is None:
+                        await asyncio.sleep(INTERVALO)
+                        continue
+                    huella_anterior = huella
+                    texto = await self.ocr(lista)
                     if not texto:
                         texto = await self.ocr(img)  # por si el subtítulo no es blanco
                     parecido = difflib.SequenceMatcher(None, texto, anterior).ratio()
@@ -267,6 +277,8 @@ class Barra:
         for txt, accion, ayuda in izq:
             b = self.boton(txt, accion, ayuda, {"x": x, "y": 4})
             x += b.winfo_reqwidth() + 4
+        self.btn_variante = self.boton("EN·A", self.cambiar_variante,
+                                       "Variante de inglés (A = automática)", {"x": x, "y": 4})
         self.boton("✕", self.salir, "Salir (Esc)", {"relx": 1.0, "x": -4, "y": 4, "anchor": "ne"},
                    bg="#B3261E")
         # esquina para cambiar el tamaño del cuadro
@@ -285,6 +297,8 @@ class Barra:
 
         self.cola = queue.Queue()
         self.lector = Lector(self.cola)
+        if cfg.get("variante") in self.lector.variantes.opciones():
+            self.lector.variantes.elegida = cfg["variante"]
         if cfg.get("traductor") in TRADUCTORES:
             self.lector.motor_traduccion = cfg["traductor"]
         self.lector.start()
@@ -355,6 +369,18 @@ class Barra:
         self.lector.motor_traduccion = nuevo
         self.texto.configure(text=f"Traductor: {nuevo}")
 
+    def cambiar_variante(self):
+        v = self.lector.variantes
+        ops = v.opciones()
+        v.elegida = ops[(ops.index(v.elegida) + 1) % len(ops)]
+        self.texto.configure(text=f"Inglés: {v.nombre(v.elegida)}")
+        self.rotular_variante()
+
+    def rotular_variante(self):
+        v = self.lector.variantes
+        codigo = v.actual().split("-", 1)[1].split("-")[0]  # en-GB -> GB
+        self.btn_variante.configure(text=f"{codigo}·A" if v.elegida == AUTO else codigo)
+
     # --- zona y textos -------------------------------------------------
     def marcar(self):
         self.ocultar_botones()
@@ -388,6 +414,7 @@ class Barra:
                 self.texto.configure(text=t or " ")
         except queue.Empty:
             pass
+        self.rotular_variante()
         self.raiz.after(100, self.revisar)
 
     def salir(self):
@@ -397,7 +424,8 @@ class Barra:
         else:
             geom = cargar_config().get("geometria")
         guardar_config({"letra": self.tam, "opacidad": self.alpha, "geometria": geom,
-                       "traductor": self.lector.motor_traduccion})
+                       "traductor": self.lector.motor_traduccion,
+                       "variante": self.lector.variantes.elegida})
         self.raiz.destroy()
 
 
