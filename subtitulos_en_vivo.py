@@ -15,6 +15,7 @@ import os
 import queue
 import re
 import threading
+import time
 import tkinter as tk
 from pathlib import Path
 
@@ -145,16 +146,20 @@ class Lector(threading.Thread):
         self.cache = {}
         self.motor_traduccion = "argos"
         self.variantes = Variantes()
+        self.pausa_hasta = {}  # traductor -> momento en que se vuelve a intentar
         argos.translate("hello", "en", "es")  # precarga: la primera traducción tarda ~5 s
 
     def traducir(self, texto):
         texto = self.variantes.normalizar(limpiar(texto))
         clave = (self.motor_traduccion, texto)
         if clave not in self.cache:
-            try:
-                es = TRADUCTORES[self.motor_traduccion](texto)
-            except Exception:  # sin internet, límite diario, etc. -> offline
-                es = None
+            es = None
+            # si un traductor en línea falló hace poco, no esperarlo en cada frase
+            if time.monotonic() >= self.pausa_hasta.get(self.motor_traduccion, 0):
+                try:
+                    es = TRADUCTORES[self.motor_traduccion](texto)
+                except Exception:  # sin internet, límite diario, bloqueo -> offline
+                    self.pausa_hasta[self.motor_traduccion] = time.monotonic() + 120
             self.cache[clave] = aplicar_glosario(es or argos.translate(texto, "en", "es"))
         return self.cache[clave]
 
